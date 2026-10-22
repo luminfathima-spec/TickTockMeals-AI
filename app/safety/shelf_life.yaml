@@ -1,0 +1,81 @@
+# Shelf Life Lookup Table for TickTock Meals
+# Maps (category x storage) to base_safe_hours for human consumption window.
+# Each entry is derived directly from KB notes in app/safety/kb/.
+
+# Source: cooked_rice_safety.md & hot_holding.md
+cooked_rice:
+  hot_held: 5.0
+  ambient: 3.5
+  refrigerated: 24.0
+  unknown: 2.5
+
+# Source: gravy_dishes_and_curries.md & danger_zone_and_time_limits.md
+curry_gravy:
+  hot_held: 5.0
+  ambient: 3.5
+  refrigerated: 24.0
+  unknown: 2.5
+
+# Source: danger_zone_and_time_limits.md & cooling_and_refrigeration.md
+dry_veg:
+  hot_held: 5.0
+  ambient: 4.0
+  refrigerated: 24.0
+  unknown: 2.5
+
+# Source: dairy_and_curd_safety.md
+dairy:
+  hot_held: 4.0
+  ambient: 2.5
+  refrigerated: 18.0
+  unknown: 2.0
+
+# Source: packaged_food_and_expiry.md
+bakery:
+  hot_held: 4.0
+  ambient: 24.0
+  refrigerated: 48.0
+  unknown: 4.0
+
+# Source: danger_zone_and_time_limits.md
+fruit_veg_raw:
+  hot_held: 2.0
+  ambient: 4.0
+  refrigerated: 12.0
+  unknown: 2.5
+
+# Source: packaged_food_and_expiry.md
+packaged:
+  hot_held: 6.0
+  ambient: 48.0
+  refrigerated: 72.0
+  unknown: 24.0
+
+# Source: animal_feed_exclusions.md & danger_zone_and_time_limits.md
+sweet:
+  hot_held: 5.0
+  ambient: 8.0
+  refrigerated: 48.0
+  unknown: 4.0
+
+# Source: danger_zone_and_time_limits.md
+beverage:
+  hot_held: 3.0
+  ambient: 3.0
+  refrigerated: 12.0
+  unknown: 2.0
+
+# Source: danger_zone_and_time_limits.md (general cooked dishes)
+other:
+  hot_held: 4.0
+  ambient: 3.0
+  refrigerated: 18.0
+  unknown: 2.0
+
+# Default conservative fallback row for unknown category
+# Source: danger_zone_and_time_limits.md (2-hour critical danger zone threshold)
+default:
+  hot_held: 3.5
+  ambient: 2.0
+  refrigerated: 12.0
+  unknown: 2.0

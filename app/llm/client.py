@@ -174,14 +174,27 @@ def _build_mock_structured(schema: Type[T], seed_text: str = "") -> T:
 
 
 def _pseudo_embed(text: str, dim: int = 768) -> List[float]:
-    """Generate a deterministic unit-length pseudo-embedding for mock mode."""
-    seed_bytes = hashlib.sha256(text.encode("utf-8")).digest()
-    seed_int = int.from_bytes(seed_bytes[:8], "big")
-    rng = np.random.default_rng(seed_int)
-    vec = rng.standard_normal(dim).astype(np.float32)
-    norm = np.linalg.norm(vec)
+    """Generate a deterministic keyword-aware unit-length pseudo-embedding for mock mode."""
+    import re
+    vec = np.zeros(dim, dtype=np.float32)
+    tokens = re.findall(r"\w+", text.lower())
+    for token in tokens:
+        # Hash token to a bucket
+        token_hash = int(hashlib.sha256(token.encode("utf-8")).hexdigest()[:8], 16)
+        idx = token_hash % dim
+        vec[idx] += 1.0
+        # Character trigrams for subword robustness
+        if len(token) >= 3:
+            for i in range(len(token) - 2):
+                ngram = token[i : i + 3]
+                ng_hash = int(hashlib.md5(ngram.encode("utf-8")).hexdigest()[:8], 16)
+                vec[ng_hash % dim] += 0.35
+
+    norm = float(np.linalg.norm(vec))
     if norm > 0:
         vec = vec / norm
+    else:
+        vec[0] = 1.0
     return vec.tolist()
 
 
@@ -260,8 +273,9 @@ class LLMClient:
             self.counters.cached_calls += 1
             return cached["text"]
 
-        # Enforce rate limiter
-        self.rate_limiter.acquire()
+        # Enforce rate limiter in live mode
+        if self.mode != "mock":
+            self.rate_limiter.acquire()
 
         if self.mode == "mock":
             self.counters.mock_calls += 1
@@ -340,7 +354,8 @@ class LLMClient:
             self.counters.cached_calls += 1
             return schema.model_validate(cached["data"])
 
-        self.rate_limiter.acquire()
+        if self.mode != "mock":
+            self.rate_limiter.acquire()
 
         if self.mode == "mock":
             self.counters.mock_calls += 1
@@ -444,7 +459,8 @@ class LLMClient:
             elif "text" in cached:
                 return cached["text"]
 
-        self.rate_limiter.acquire()
+        if self.mode != "mock":
+            self.rate_limiter.acquire()
 
         if self.mode == "mock":
             self.counters.mock_calls += 1
@@ -554,7 +570,8 @@ class LLMClient:
             self.counters.cached_calls += 1
             return cached["embedding"]
 
-        self.rate_limiter.acquire()
+        if self.mode != "mock":
+            self.rate_limiter.acquire()
 
         if self.mode == "mock":
             self.counters.mock_calls += 1
