@@ -195,6 +195,9 @@ class Listing(BaseModel):
     tier: Tier = Field(default=Tier.HUMAN, description="Current triage tier")
     status: ListingStatus = Field(default=ListingStatus.LISTED, description="State machine status")
     expires_at: Optional[datetime] = Field(default=None, description="Safe-until expiration timestamp")
+    actual_portions: Optional[int] = Field(
+        default=None, ge=1, description="Actual portions confirmed by recipient upon delivery"
+    )
 
 
 class Match(BaseModel):
@@ -248,3 +251,17 @@ class HistoricalListing(BaseModel):
     portions: int = Field(..., ge=1, description="Quantity in portions")
     tier_rescued: str = Field(..., description="Tier that ultimately accepted the food")
     outcome: str = Field(default="DELIVERED", description="Terminal state (e.g. 'DELIVERED', 'EXPIRED')")
+
+
+class VerificationChecklist(BaseModel):
+    """Volunteer physical verification checklist completed at food handover."""
+    volunteer_id: str = Field(..., description="Courier volunteer performing verification")
+    timestamp: datetime = Field(..., description="Inspection timestamp")
+    smell_appearance_ok: bool = Field(..., description="Smell and appearance fresh, no off-odors or spoilage")
+    temperature_ok: bool = Field(default=True, description="Temperature check or still hot to touch confirmation")
+    temp_reading_c: Optional[float] = Field(default=None, description="Optional measured temperature in Celsius")
+    container_clean_covered: bool = Field(..., description="Food in clean, food-grade, covered containers")
+    labelled_with_time: bool = Field(default=True, description="Containers labelled with cooked/pickup time")
+    photo_at_pickup: Optional[str] = Field(default=None, description="Optional photo taken during handover")
+    notes: Optional[str] = Field(default=None, description="Volunteer field notes")
+

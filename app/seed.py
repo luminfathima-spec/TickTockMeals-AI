@@ -634,7 +634,19 @@ def seed_database(
             "volunteers": len(volunteers),
             "historical_listings": len(history),
         }
+
+        from app.audit import record_event
+
+        record_event(
+            event_type="DATABASE_SEEDED",
+            entity_type="system",
+            entity_id="seed_genesis",
+            payload=summary,
+            conn=conn,
+        )
+
         return summary
+
     finally:
         if close_after:
             conn.close()

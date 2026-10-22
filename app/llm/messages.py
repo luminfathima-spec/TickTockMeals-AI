@@ -29,10 +29,10 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
+from app.audit import record_event
 from app.clock import now as get_clock_now
 from app.config import get_config
 from app.db import (
-    create_audit_event,
     create_outbox_message,
     get_connection,
     get_donor,
@@ -626,22 +626,19 @@ def simulate_response(
                 create_outbox_message(vol_confirm_msg, conn=c)
 
             # Audit event
-            create_audit_event(
-                AuditEvent(
-                    id=f"aud_{uuid.uuid4().hex[:10]}",
-                    timestamp=current_time,
-                    event_type="MATCH_ACCEPTED",
-                    entity_type="match",
-                    entity_id=match.id,
-                    payload={
-                        "listing_id": match.listing_id,
-                        "recipient_id": match.recipient_id,
-                        "volunteer_id": match.volunteer_id,
-                        "message_id": message_id,
-                        "status": "ACCEPTED",
-                    },
-                ),
+            record_event(
+                event_type="MATCH_ACCEPTED",
+                entity_type="match",
+                entity_id=match.id,
+                payload={
+                    "listing_id": match.listing_id,
+                    "recipient_id": match.recipient_id,
+                    "volunteer_id": match.volunteer_id,
+                    "message_id": message_id,
+                    "status": "ACCEPTED",
+                },
                 conn=c,
+                timestamp=current_time,
             )
 
             return {
@@ -657,22 +654,19 @@ def simulate_response(
         # ---------------- Case B: DECLINE / TIMEOUT ----------------
         action_type = "DECLINED" if norm_action == "DECLINE" else "TIMED_OUT"
 
-        create_audit_event(
-            AuditEvent(
-                id=f"aud_{uuid.uuid4().hex[:10]}",
-                timestamp=current_time,
-                event_type=f"MATCH_{action_type}",
-                entity_type="match",
-                entity_id=match.id,
-                payload={
-                    "listing_id": match.listing_id,
-                    "recipient_id": match.recipient_id,
-                    "volunteer_id": match.volunteer_id,
-                    "message_id": message_id,
-                    "action": action_type,
-                },
-            ),
+        record_event(
+            event_type=f"MATCH_{action_type}",
+            entity_type="match",
+            entity_id=match.id,
+            payload={
+                "listing_id": match.listing_id,
+                "recipient_id": match.recipient_id,
+                "volunteer_id": match.volunteer_id,
+                "message_id": message_id,
+                "action": action_type,
+            },
             conn=c,
+            timestamp=current_time,
         )
 
         # Escalate to next candidate

@@ -253,9 +253,9 @@ def reclassify(
             update_listing(listing, conn=c)
 
             # 2. Write AuditEvent
-            event = AuditEvent(
-                id=f"aud_{uuid.uuid4().hex[:12]}",
-                timestamp=now,
+            from app.audit import record_event
+
+            record_event(
                 event_type="RECLASSIFIED",
                 entity_type="listing",
                 entity_id=listing.id,
@@ -266,8 +266,9 @@ def reclassify(
                     "rule_ids": decision.policy_rule_ids,
                     "minutes_left_in_new_tier": decision.minutes_left_in_tier,
                 },
+                conn=c,
+                timestamp=now,
             )
-            create_audit_event(event, conn=c)
 
             # 3. Cancel outstanding human matches if downgraded from human
             if old_tier in (Tier.HUMAN, Tier.HUMAN_RESCUE):

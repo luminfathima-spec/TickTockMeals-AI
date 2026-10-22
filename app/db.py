@@ -100,6 +100,7 @@ def init_db(conn_or_path: Optional[Union[sqlite3.Connection, str, Path]] = None)
                     tier TEXT NOT NULL,
                     status TEXT NOT NULL,
                     expires_at TEXT,
+                    actual_portions INTEGER,
                     FOREIGN KEY (donor_id) REFERENCES donors(id) ON DELETE CASCADE
                 );
 
@@ -155,9 +156,16 @@ def init_db(conn_or_path: Optional[Union[sqlite3.Connection, str, Path]] = None)
                 );
                 """
             )
+            # Automatic column migration if database was created earlier
+            cur = conn.execute("PRAGMA table_info(listings)")
+            cols = [r["name"] for r in cur.fetchall()]
+            if "actual_portions" not in cols:
+                conn.execute("ALTER TABLE listings ADD COLUMN actual_portions INTEGER")
     finally:
         if close_after:
             conn.close()
+
+
 
 
 # ---------------- Donor CRUD ----------------
@@ -452,8 +460,8 @@ def create_listing(listing: Listing, conn: Optional[sqlite3.Connection] = None) 
             c.execute(
                 """
                 INSERT INTO listings (
-                    id, donor_id, created_at, photo_path, passport, safety, tier, status, expires_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    id, donor_id, created_at, photo_path, passport, safety, tier, status, expires_at, actual_portions
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     listing.id,
@@ -465,6 +473,7 @@ def create_listing(listing: Listing, conn: Optional[sqlite3.Connection] = None) 
                     listing.tier.value if isinstance(listing.tier, Tier) else str(listing.tier),
                     listing.status.value,
                     listing.expires_at.isoformat() if listing.expires_at else None,
+                    listing.actual_portions,
                 ),
             )
         return listing
@@ -490,6 +499,7 @@ def get_listing(listing_id: str, conn: Optional[sqlite3.Connection] = None) -> O
             tier=Tier(row["tier"]) if row["tier"] in [t.value for t in Tier] else Tier.HUMAN,
             status=ListingStatus(row["status"]),
             expires_at=datetime.fromisoformat(row["expires_at"]) if row["expires_at"] else None,
+            actual_portions=row["actual_portions"] if "actual_portions" in row.keys() else None,
         )
     finally:
         if conn is None:
@@ -527,6 +537,7 @@ def list_listings(
                     tier=Tier(row["tier"]) if row["tier"] in [t.value for t in Tier] else Tier.HUMAN,
                     status=ListingStatus(row["status"]),
                     expires_at=datetime.fromisoformat(row["expires_at"]) if row["expires_at"] else None,
+                    actual_portions=row["actual_portions"] if "actual_portions" in row.keys() else None,
                 )
             )
         return results
@@ -543,7 +554,7 @@ def update_listing(listing: Listing, conn: Optional[sqlite3.Connection] = None) 
                 """
                 UPDATE listings SET
                     donor_id = ?, created_at = ?, photo_path = ?, passport = ?,
-                    safety = ?, tier = ?, status = ?, expires_at = ?
+                    safety = ?, tier = ?, status = ?, expires_at = ?, actual_portions = ?
                 WHERE id = ?
                 """,
                 (
@@ -555,6 +566,7 @@ def update_listing(listing: Listing, conn: Optional[sqlite3.Connection] = None) 
                     listing.tier.value if isinstance(listing.tier, Tier) else str(listing.tier),
                     listing.status.value,
                     listing.expires_at.isoformat() if listing.expires_at else None,
+                    listing.actual_portions,
                     listing.id,
                 ),
             )
@@ -562,6 +574,7 @@ def update_listing(listing: Listing, conn: Optional[sqlite3.Connection] = None) 
     finally:
         if conn is None:
             c.close()
+
 
 
 # ---------------- Match CRUD ----------------
