@@ -25,6 +25,10 @@ class Tier(str, Enum):
     ANIMAL = "ANIMAL"
     COMPOST = "COMPOST"
     DISCARD = "DISCARD"
+    HUMAN_RESCUE = "HUMAN_RESCUE"
+    ANIMAL_FEED = "ANIMAL_FEED"
+    COMPOST_BIOGAS = "COMPOST_BIOGAS"
+    DISCARD_UNSAFE = "DISCARD_UNSAFE"
 
 
 class VehicleType(str, Enum):

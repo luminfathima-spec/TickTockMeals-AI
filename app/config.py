@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, ValidationError
 import yaml
@@ -57,6 +57,15 @@ class AppConfig(BaseModel):
     avg_speed_kmph: SpeedConfig = Field(default_factory=SpeedConfig)
     handover_buffer_minutes: int = Field(default=15, ge=0)
     min_human_window_minutes: int = Field(default=45, ge=0)
+    animal_window_hours: float = Field(default=2.0, ge=0.0)
+    compost_window_hours: float = Field(default=24.0, ge=0.0)
+    animal_exclusions: List[str] = Field(
+        default_factory=lambda: [
+            "onion", "garlic", "chocolate", "cocoa", "sweet", "spicy",
+            "chilli", "chili", "salt", "curry", "sambar", "biryani",
+            "masala", "dal tadka", "jamun", "pak"
+        ]
+    )
     vision_confidence_threshold: float = Field(default=0.6, ge=0.0, le=1.0)
     scoring_weights: ScoringWeights
     impact_factors: ImpactFactors = Field(default_factory=ImpactFactors)

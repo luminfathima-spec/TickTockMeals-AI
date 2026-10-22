@@ -34,6 +34,31 @@ handover_buffer_minutes: 15
 # Below this threshold, food cascades to animal feed
 min_human_window_minutes: 45
 
+# Additional duration (hours) food remains suitable for animal feed after human window
+animal_window_hours: 2.0
+
+# Duration (hours) food remains viable for compost/biogas before discarding
+compost_window_hours: 24.0
+
+# Animal feed toxic ingredient exclusions (dishes containing these skip animal tier)
+animal_exclusions:
+  - "onion"
+  - "garlic"
+  - "chocolate"
+  - "cocoa"
+  - "sweet"
+  - "spicy"
+  - "chilli"
+  - "chili"
+  - "salt"
+  - "curry"
+  - "sambar"
+  - "biryani"
+  - "masala"
+  - "dal tadka"
+  - "jamun"
+  - "pak"
+
 # Matching scoring weights (must sum to ~1.0)
 # Adjustable assumption to be sourced in README
 scoring_weights:
