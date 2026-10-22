@@ -751,7 +751,36 @@ def list_outbox_messages(conn: Optional[sqlite3.Connection] = None) -> List[Outb
             c.close()
 
 
+def update_outbox_message(msg: OutboxMessage, conn: Optional[sqlite3.Connection] = None) -> OutboxMessage:
+    c = conn or get_connection()
+    try:
+        with c:
+            c.execute(
+                """
+                UPDATE outbox_messages SET
+                    recipient_or_volunteer_id = ?, role = ?, language = ?,
+                    message_text = ?, status = ?, created_at = ?, match_id = ?
+                WHERE id = ?
+                """,
+                (
+                    msg.recipient_or_volunteer_id,
+                    msg.role,
+                    msg.language,
+                    msg.message_text,
+                    msg.status,
+                    msg.created_at.isoformat(),
+                    msg.match_id,
+                    msg.id,
+                ),
+            )
+        return msg
+    finally:
+        if conn is None:
+            c.close()
+
+
 # ---------------- Audit Event CRUD ----------------
+
 
 def create_audit_event(event: AuditEvent, conn: Optional[sqlite3.Connection] = None) -> AuditEvent:
     c = conn or get_connection()
