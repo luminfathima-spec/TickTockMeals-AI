@@ -647,6 +647,37 @@ def list_matches(listing_id: Optional[str] = None, conn: Optional[sqlite3.Connec
             c.close()
 
 
+def update_match(match: Match, conn: Optional[sqlite3.Connection] = None) -> Match:
+    c = conn or get_connection()
+    try:
+        with c:
+            c.execute(
+                """
+                UPDATE matches SET
+                    listing_id = ?, recipient_id = ?, volunteer_id = ?,
+                    score = ?, score_breakdown = ?, why_this_match = ?,
+                    status = ?, created_at = ?, responded_at = ?
+                WHERE id = ?
+                """,
+                (
+                    match.listing_id,
+                    match.recipient_id,
+                    match.volunteer_id,
+                    match.score,
+                    json.dumps(match.score_breakdown, default=str) if match.score_breakdown else None,
+                    match.why_this_match,
+                    match.status,
+                    match.created_at.isoformat(),
+                    match.responded_at.isoformat() if match.responded_at else None,
+                    match.id,
+                ),
+            )
+        return match
+    finally:
+        if conn is None:
+            c.close()
+
+
 # ---------------- Outbox Message CRUD ----------------
 
 def create_outbox_message(msg: OutboxMessage, conn: Optional[sqlite3.Connection] = None) -> OutboxMessage:

@@ -67,6 +67,8 @@ class AppConfig(BaseModel):
         ]
     )
     vision_confidence_threshold: float = Field(default=0.6, ge=0.0, le=1.0)
+    match_safety_margin_minutes: int = Field(default=15, ge=0)
+    match_response_timeout_minutes: int = Field(default=15, ge=1)
     scoring_weights: ScoringWeights
     impact_factors: ImpactFactors = Field(default_factory=ImpactFactors)
     gemini_api_key: Optional[str] = Field(default=None, exclude=True)

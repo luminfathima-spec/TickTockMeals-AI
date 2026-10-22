@@ -68,6 +68,12 @@ scoring_weights:
   diet: 0.10
   hours: 0.10
 
+# Matching safety margin (minutes) deducted from remaining safe window
+match_safety_margin_minutes: 15
+
+# Response timeout (minutes) before escalating to the next candidate
+match_response_timeout_minutes: 15
+
 # Environmental and meal impact factors
 # Adjustable assumption to be sourced in README
 impact_factors:
