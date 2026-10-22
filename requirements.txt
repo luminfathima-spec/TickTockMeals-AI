@@ -1,0 +1,13 @@
+google-genai
+pydantic>=2
+python-dotenv
+pyyaml
+numpy
+scipy
+streamlit
+pydeck
+pandas
+plotly
+qrcode[pil]
+pytest
+tenacity

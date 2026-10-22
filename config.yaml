@@ -1,0 +1,50 @@
+# TickTock Meals Configuration
+
+llm:
+  # LLM execution mode: 'mock' (offline fixtures/stubs) or 'live' (Gemini API)
+  # Overridden by environment variable LLM_MODE if set.
+  mode: "mock"
+
+  # Model names live ONLY in config.yaml - never hardcode in application code.
+  models:
+    MODEL_FAST: "gemini-2.5-flash"
+    MODEL_VISION: "gemini-2.5-flash"
+    MODEL_EMBED: "text-embedding-004"
+
+  # Free-tier rate limiter (calls per minute)
+  rate_limit_per_minute: 10
+
+  # On-disk response cache directory
+  cache_dir: ".cache"
+
+# SQLite database file path
+db_path: "data/ticktockmeals.db"
+
+# Average transit speeds for ETA calculation (km/h)
+# Adjustable assumption to be sourced in README
+avg_speed_kmph:
+  bike: 22.0
+  car: 25.0
+
+# Handover buffer time added to ETA (minutes)
+# Adjustable assumption to be sourced in README
+handover_buffer_minutes: 15
+
+# Minimum useful window remaining for human rescue (minutes)
+# Below this threshold, food cascades to animal feed
+min_human_window_minutes: 45
+
+# Matching scoring weights (must sum to ~1.0)
+# Adjustable assumption to be sourced in README
+scoring_weights:
+  urgency: 0.35
+  proximity: 0.25
+  capacity: 0.20
+  diet: 0.10
+  hours: 0.10
+
+# Environmental and meal impact factors
+# Adjustable assumption to be sourced in README
+impact_factors:
+  kg_per_meal: 0.4            # Average portion weight (kg per meal)
+  co2e_kg_per_kg_food: 2.5    # Avoided CO2 equivalent emission factor (kg CO2e / kg food)

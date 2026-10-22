@@ -1,0 +1,25 @@
+# Environment and secrets
+.env
+*.env
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+
+# Python bytecode & caches
+__pycache__/
+*.py[cod]
+*$py.class
+.cache/
+.pytest_cache/
+
+# SQLite databases
+data/*.db
+data/*.sqlite3
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
