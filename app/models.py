@@ -44,6 +44,101 @@ class ListingStatus(str, Enum):
     RECLASSIFIED = "RECLASSIFIED"
 
 
+class DishCategory(str, Enum):
+    COOKED_RICE = "cooked_rice"
+    CURRY_GRAVY = "curry_gravy"
+    DRY_VEG = "dry_veg"
+    DAIRY = "dairy"
+    BAKERY = "bakery"
+    FRUIT_VEG_RAW = "fruit_veg_raw"
+    PACKAGED = "packaged"
+    SWEET = "sweet"
+    BEVERAGE = "beverage"
+    OTHER = "other"
+
+
+class VegStatus(str, Enum):
+    VEG = "veg"
+    NON_VEG = "non_veg"
+    EGG = "egg"
+    UNKNOWN = "unknown"
+
+
+class VisibleFlag(str, Enum):
+    SPILLAGE = "spillage"
+    DISCOLORATION = "discoloration"
+    MOLD = "mold"
+    OFF_VISUAL = "off_visual"
+    CONTAMINATION_RISK = "contamination_risk"
+    NONE = "none"
+
+
+class AllergenHint(str, Enum):
+    NUTS = "nuts"
+    DAIRY = "dairy"
+    GLUTEN = "gluten"
+    EGG = "egg"
+    SOY = "soy"
+    SESAME = "sesame"
+    UNKNOWN = "unknown"
+
+
+class StorageCondition(str, Enum):
+    HOT_HELD = "hot_held"
+    AMBIENT = "ambient"
+    REFRIGERATED = "refrigerated"
+    UNKNOWN = "unknown"
+
+
+class ContainerType(str, Enum):
+    OPEN = "open"
+    COVERED = "covered"
+    SEALED = "sealed"
+    UNKNOWN = "unknown"
+
+
+class DonorForm(BaseModel):
+    """Donor self-reported handling form submitted alongside surplus food photos."""
+    cooked_at: str = Field(..., description="Estimated time cooked (e.g. '12:30' or '2026-10-22T12:30:00')")
+    storage: StorageCondition = Field(default=StorageCondition.UNKNOWN, description="Storage condition after prep")
+    est_portions: Optional[int] = Field(default=None, description="Donor self-reported portions estimate")
+    container: ContainerType = Field(default=ContainerType.COVERED, description="Packaging/container state")
+    notes: Optional[str] = Field(default=None, description="Free text notes from donor")
+
+
+class Dish(BaseModel):
+    """Distinct food item identified from donor images."""
+    name: str = Field(..., description="Recognized dish name")
+    category: DishCategory = Field(..., description="Dish category classification")
+    veg_status: VegStatus = Field(default=VegStatus.VEG, description="Vegetarian/egg/non-veg status")
+    est_portions: int = Field(..., ge=1, description="Estimated number of meal portions")
+    visible_flags: List[VisibleFlag] = Field(
+        default_factory=lambda: [VisibleFlag.NONE],
+        description="Visual quality indicators observed in image",
+    )
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Model confidence score (0.0 to 1.0)")
+
+
+class FoodPassport(BaseModel):
+    """Structured verifiable Food Passport created from photos and handling details."""
+    dishes: List[Dish] = Field(default_factory=list, description="List of recognized dishes")
+    allergen_hints: List[AllergenHint] = Field(
+        default_factory=list,
+        description="Visual allergen guesses (nuts, dairy, gluten, egg, soy, sesame, unknown)",
+    )
+    allergen_note: str = Field(
+        default="Allergen hints are visual estimates only and must be verified by volunteers.",
+        description="Mandatory disclaimer for allergen indicators",
+    )
+    photo_quality_ok: bool = Field(default=True, description="Whether image resolution and lighting are adequate")
+    photo_quality_note: str = Field(default="Clear image", description="Photo clarity details")
+    needs_human_check: bool = Field(
+        default=False,
+        description="True if confidence is low, quality is poor, or visible risk flags are detected",
+    )
+    handling: DonorForm = Field(..., description="Donor self-reported handling metadata")
+
+
 class Donor(BaseModel):
     """Food donor profile (e.g., college mess, marriage hall, canteen)."""
     id: str = Field(..., description="Unique donor identifier (e.g. 'donor_01')")

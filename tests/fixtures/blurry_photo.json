@@ -1,0 +1,16 @@
+{
+  "dishes": [
+    {
+      "name": "Unidentified Food Substance",
+      "category": "other",
+      "veg_status": "unknown",
+      "est_portions": 10,
+      "visible_flags": ["off_visual"],
+      "confidence": 0.35
+    }
+  ],
+  "allergen_hints": ["unknown"],
+  "photo_quality_ok": false,
+  "photo_quality_note": "Extremely blurry and dark image; details cannot be resolved reliably",
+  "needs_human_check": true
+}

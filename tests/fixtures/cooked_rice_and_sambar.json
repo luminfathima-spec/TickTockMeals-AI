@@ -1,0 +1,24 @@
+{
+  "dishes": [
+    {
+      "name": "Steamed Sona Masoori Rice",
+      "category": "cooked_rice",
+      "veg_status": "veg",
+      "est_portions": 40,
+      "visible_flags": ["none"],
+      "confidence": 0.95
+    },
+    {
+      "name": "Vegetable Drumstick Sambar",
+      "category": "curry_gravy",
+      "veg_status": "veg",
+      "est_portions": 35,
+      "visible_flags": ["none"],
+      "confidence": 0.92
+    }
+  ],
+  "allergen_hints": ["nuts"],
+  "photo_quality_ok": true,
+  "photo_quality_note": "Clear, well-lit overhead shot of hotel stainless steel containers",
+  "needs_human_check": false
+}

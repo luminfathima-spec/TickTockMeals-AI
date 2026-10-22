@@ -57,6 +57,7 @@ class AppConfig(BaseModel):
     avg_speed_kmph: SpeedConfig = Field(default_factory=SpeedConfig)
     handover_buffer_minutes: int = Field(default=15, ge=0)
     min_human_window_minutes: int = Field(default=45, ge=0)
+    vision_confidence_threshold: float = Field(default=0.6, ge=0.0, le=1.0)
     scoring_weights: ScoringWeights
     impact_factors: ImpactFactors = Field(default_factory=ImpactFactors)
     gemini_api_key: Optional[str] = Field(default=None, exclude=True)

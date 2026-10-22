@@ -1,0 +1,16 @@
+{
+  "dishes": [
+    {
+      "name": "Curd Rice with Mustard Tempering",
+      "category": "dairy",
+      "veg_status": "veg",
+      "est_portions": 30,
+      "visible_flags": ["discoloration"],
+      "confidence": 0.86
+    }
+  ],
+  "allergen_hints": ["dairy"],
+  "photo_quality_ok": true,
+  "photo_quality_note": "Clear view showing yellowish surface patches and whey separation",
+  "needs_human_check": true
+}

@@ -1,0 +1,16 @@
+{
+  "dishes": [
+    {
+      "name": "Chicken Dum Biryani",
+      "category": "cooked_rice",
+      "veg_status": "non_veg",
+      "est_portions": 50,
+      "visible_flags": ["none"],
+      "confidence": 0.94
+    }
+  ],
+  "allergen_hints": ["dairy"],
+  "photo_quality_ok": true,
+  "photo_quality_note": "Crisp view of covered catering tray opened for inspection",
+  "needs_human_check": false
+}
