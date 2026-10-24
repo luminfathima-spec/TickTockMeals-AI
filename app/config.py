@@ -23,9 +23,13 @@ class LLMModels(BaseModel):
 
 class LLMConfig(BaseModel):
     """LLM execution settings."""
-    mode: Literal["mock", "live"] = Field(default="mock", description="Execution mode: mock or live")
+    mode: Literal["mock", "live", "replay", "cache_only", "fallback"] = Field(
+        default="mock", description="Execution mode: mock, live, replay, cache_only, or fallback"
+    )
     models: LLMModels
     rate_limit_per_minute: int = Field(default=10, ge=1, le=120)
+    daily_call_budget: int = Field(default=100, ge=1)
+    soft_budget_threshold_pct: float = Field(default=0.85, ge=0.1, le=1.0)
     cache_dir: str = Field(default=".cache")
 
 
@@ -71,6 +75,10 @@ class AppConfig(BaseModel):
     match_response_timeout_minutes: int = Field(default=15, ge=1)
     scoring_weights: ScoringWeights
     impact_factors: ImpactFactors = Field(default_factory=ImpactFactors)
+    max_photo_size_bytes: int = Field(default=5242880, ge=1024)
+    allowed_photo_extensions: List[str] = Field(
+        default_factory=lambda: [".jpg", ".jpeg", ".png", ".webp"]
+    )
     gemini_api_key: Optional[str] = Field(default=None, exclude=True)
 
 

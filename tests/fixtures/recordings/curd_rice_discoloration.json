@@ -1,0 +1,69 @@
+{
+  "scenario": "curd_rice_discoloration",
+  "recorded_at": "2026-10-24T12:30:00",
+  "mode": "mock",
+  "passport": {
+    "dishes": [
+      {
+        "name": "Curd Rice with Mustard Tempering",
+        "category": "dairy",
+        "veg_status": "veg",
+        "est_portions": 30,
+        "visible_flags": [
+          "discoloration"
+        ],
+        "confidence": 0.86
+      }
+    ],
+    "allergen_hints": [
+      "dairy"
+    ],
+    "allergen_note": "Allergen hints are visual estimates only and must be verified by volunteers.",
+    "photo_quality_ok": true,
+    "photo_quality_note": "Clear view showing yellowish surface patches and whey separation",
+    "needs_human_check": true,
+    "handling": {
+      "cooked_at": "10:00:00",
+      "storage": "ambient",
+      "est_portions": 25,
+      "container": "open",
+      "notes": "Left in warm dining area; slight yellowing visible on surface."
+    }
+  },
+  "safety_verdict": {
+    "safe_until": "2026-10-24T12:30:00",
+    "minutes_left": 0,
+    "risk_level": "HIGH",
+    "human_ok": false,
+    "reasons": [
+      "Quality flag: Discoloration or off-visual appearance detected; requires human volunteer inspection.",
+      "Hygiene flag: Open, uncovered container creates environmental contamination exposure.",
+      "Elapsed holding time exceeded safe threshold (2.5h); danger zone proliferation risk.",
+      "Evaluated surplus with 1 dish(es) under ambient conditions. Based on guidance in [dairy_and_curd_safety_2], [cooked_rice_safety_2], holding window is active until 12:30. Mandatory temperature check recommended prior to handover."
+    ],
+    "citations": [
+      {
+        "id": "dairy_and_curd_safety_2",
+        "source": "FSSAI Dairy Products Safety Standards, Regulations Sec. 2.1; ICMR Food Safety Manual Sec. 6"
+      },
+      {
+        "id": "cooked_rice_safety_2",
+        "source": "FSSAI Guidance Note on Cooked Cereals, Pulses, and Rice Hygiene Sec. 3.2; UK FSA Bacillus cereus Advisory Note"
+      },
+      {
+        "id": "cooling_and_refrigeration_2",
+        "source": "WHO Five Keys to Safer Food, Key 3 (Keep Food at Safe Temperatures); FSSAI Schedule 4, General Hygiene Part II Sec. 6.3"
+      },
+      {
+        "id": "danger_zone_and_time_limits_2",
+        "source": "FSSAI Food Safety and Standards Regulations, Guidance on Catering Services Sec. 4.1; WHO Five Keys to Safer Food, Key 3"
+      }
+    ],
+    "requires_human_check": true,
+    "disclaimer": "Advisory only. Mandatory human volunteer verification required before distribution."
+  },
+  "messages": {
+    "en": "TickTock Meals: Urgent food rescue! 30 portions Curd Rice with Mustard Tempering (Pure Veg). Allergens: dairy (visual guess only). Safe until: 12:30 PM. Pickup Area: Yelahanka New Town. Reply ACCEPT to claim or DECLINE.",
+    "kn": "\u0c9f\u0cbf\u0c95\u0ccd\u200c\u0c9f\u0cbe\u0c95\u0ccd \u0cae\u0cc0\u0cb2\u0ccd\u0cb8\u0ccd: \u0ca4\u0cc1\u0cb0\u0ccd\u0ca4\u0cc1 \u0c86\u0cb9\u0cbe\u0cb0 \u0cb0\u0c95\u0ccd\u0cb7\u0ca3\u0cc6! 30 \u0c8a\u0c9f Curd Rice with Mustard Tempering (\u0cb6\u0cc1\u0ca6\u0ccd\u0ca7 \u0cb8\u0cb8\u0ccd\u0caf\u0cbe\u0cb9\u0cbe\u0cb0\u0cbf). \u0c85\u0cb2\u0cb0\u0ccd\u0c9c\u0cbf\u0ca8\u0ccd: dairy (\u0ca6\u0cc3\u0cb6\u0ccd\u0caf \u0c85\u0c82\u0ca6\u0cbe\u0c9c\u0cc1 \u0cae\u0cbe\u0ca4\u0ccd\u0cb0). \u0cb8\u0cc1\u0cb0\u0c95\u0ccd\u0cb7\u0cbf\u0ca4 \u0cb8\u0cae\u0caf: 12:30 PM. \u0cb8\u0c82\u0c97\u0ccd\u0cb0\u0cb9\u0ca3\u0cbe \u0caa\u0ccd\u0cb0\u0ca6\u0cc7\u0cb6: \u0caf\u0cb2\u0cb9\u0c82\u0c95. \u0cb8\u0ccd\u0cb5\u0cc0\u0c95\u0cb0\u0cbf\u0cb8\u0cb2\u0cc1 ACCEPT \u0c85\u0ca5\u0cb5\u0cbe \u0ca4\u0cbf\u0cb0\u0cb8\u0ccd\u0c95\u0cb0\u0cbf\u0cb8\u0cb2\u0cc1 DECLINE \u0c8e\u0c82\u0ca6\u0cc1 \u0c89\u0ca4\u0ccd\u0ca4\u0cb0\u0cbf\u0cb8\u0cbf."
+  }
+}

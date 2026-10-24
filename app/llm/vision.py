@@ -16,6 +16,7 @@ from PIL import Image
 from pydantic import BaseModel, Field
 
 from app.config import get_config
+from app.input_guards import build_hardened_vision_prompt, validate_photo_file
 from app.llm.client import LLMClient
 from app.models import (
     AllergenHint,
@@ -157,14 +158,17 @@ def extract_passport(
     llm_client = client or LLMClient()
     active_mode = mode or llm_client.mode
 
-    # Clean and resize all photos
+    # Clean and resize all photos, validating against malicious inputs
     cleaned_bytes_list: List[bytes] = []
     for p in photos:
+        is_ok, reason = validate_photo_file(p)
+        if not is_ok:
+            raise ValueError(f"Invalid photo upload: {reason}")
         b, _ = preprocess_image(p, max_side=1024)
         cleaned_bytes_list.append(b)
 
-    # ---------------- MOCK MODE ----------------
-    if active_mode == "mock":
+    # ---------------- MOCK & OFFLINE REPLAY / FALLBACK MODES ----------------
+    if active_mode in ("mock", "replay", "fallback", "cache_only"):
         fixture_name = None
         for p in photos:
             if isinstance(p, (str, Path)):
@@ -178,11 +182,17 @@ def extract_passport(
             candidates = [
                 Path("tests/fixtures") / f"{fixture_name}.json",
                 Path("fixtures") / f"{fixture_name}.json",
+                Path("tests/fixtures/recordings") / f"{fixture_name}.json",
+                Path("fixtures/recordings") / f"{fixture_name}.json",
             ]
             for c in candidates:
                 if c.is_file():
                     with open(c, "r", encoding="utf-8") as f:
-                        fixture_dict = json.load(f)
+                        loaded = json.load(f)
+                    if isinstance(loaded, dict) and "passport" in loaded:
+                        fixture_dict = loaded["passport"]
+                    else:
+                        fixture_dict = loaded
                     break
 
         if fixture_dict is None:
@@ -264,13 +274,13 @@ def extract_passport(
         )
 
     # ---------------- LIVE MODE ----------------
-    prompt = (
+    base_prompt = (
         f"Analyze these surplus meal photos.\n"
         f"Donor reported cooked time: {form.cooked_at}, storage: {form.storage.value}, "
-        f"container: {form.container.value}, estimated portions: {form.est_portions or 'unspecified'}, "
-        f"donor notes: {form.notes or 'none'}.\n"
-        f"Return JSON adhering to RawVisionPassport schema."
+        f"container: {form.container.value}, estimated portions: {form.est_portions or 'unspecified'}."
     )
+    prompt = build_hardened_vision_prompt(base_prompt, form.notes)
+    prompt += "\nReturn JSON adhering to RawVisionPassport schema."
 
     try:
         raw_res = llm_client.generate_with_images(

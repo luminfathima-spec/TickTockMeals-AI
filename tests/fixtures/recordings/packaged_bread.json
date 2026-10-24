@@ -1,0 +1,67 @@
+{
+  "scenario": "packaged_bread",
+  "recorded_at": "2026-10-24T12:30:00",
+  "mode": "mock",
+  "passport": {
+    "dishes": [
+      {
+        "name": "Whole Wheat Sliced Bread",
+        "category": "bakery",
+        "veg_status": "veg",
+        "est_portions": 25,
+        "visible_flags": [
+          "none"
+        ],
+        "confidence": 0.91
+      }
+    ],
+    "allergen_hints": [
+      "gluten"
+    ],
+    "allergen_note": "Allergen hints are visual estimates only and must be verified by volunteers.",
+    "photo_quality_ok": true,
+    "photo_quality_note": "Intact factory packaging with visible brand label",
+    "needs_human_check": false,
+    "handling": {
+      "cooked_at": "08:00:00",
+      "storage": "ambient",
+      "est_portions": 30,
+      "container": "sealed",
+      "notes": "Factory-sealed bakery loaves."
+    }
+  },
+  "safety_verdict": {
+    "safe_until": "2026-10-25T08:00:00",
+    "minutes_left": 1170,
+    "risk_level": "LOW",
+    "human_ok": true,
+    "reasons": [
+      "Within safe holding window: 1170 minutes remaining (base 24.0h).",
+      "Evaluated surplus with 1 dish(es) under ambient conditions. Based on guidance in [dairy_and_curd_safety_2], [gravy_dishes_and_curries_2], holding window is active until 08:00. Mandatory temperature check recommended prior to handover."
+    ],
+    "citations": [
+      {
+        "id": "dairy_and_curd_safety_2",
+        "source": "FSSAI Dairy Products Safety Standards, Regulations Sec. 2.1; ICMR Food Safety Manual Sec. 6"
+      },
+      {
+        "id": "gravy_dishes_and_curries_2",
+        "source": "FSSAI Guidelines for Safe Food in Canteens and Mass Catering Sec. 4.4; US FDA Food Code Sec. 3-501.16"
+      },
+      {
+        "id": "danger_zone_and_time_limits_2",
+        "source": "FSSAI Food Safety and Standards Regulations, Guidance on Catering Services Sec. 4.1; WHO Five Keys to Safer Food, Key 3"
+      },
+      {
+        "id": "cooked_rice_safety_2",
+        "source": "FSSAI Guidance Note on Cooked Cereals, Pulses, and Rice Hygiene Sec. 3.2; UK FSA Bacillus cereus Advisory Note"
+      }
+    ],
+    "requires_human_check": false,
+    "disclaimer": "Advisory only. Mandatory human volunteer verification required before distribution."
+  },
+  "messages": {
+    "en": "TickTock Meals: Urgent food rescue! 25 portions Whole Wheat Sliced Bread (Pure Veg). Allergens: gluten (visual guess only). Safe until: 08:00 AM. Pickup Area: Yelahanka New Town. Reply ACCEPT to claim or DECLINE.",
+    "kn": "\u0c9f\u0cbf\u0c95\u0ccd\u200c\u0c9f\u0cbe\u0c95\u0ccd \u0cae\u0cc0\u0cb2\u0ccd\u0cb8\u0ccd: \u0ca4\u0cc1\u0cb0\u0ccd\u0ca4\u0cc1 \u0c86\u0cb9\u0cbe\u0cb0 \u0cb0\u0c95\u0ccd\u0cb7\u0ca3\u0cc6! 25 \u0c8a\u0c9f Whole Wheat Sliced Bread (\u0cb6\u0cc1\u0ca6\u0ccd\u0ca7 \u0cb8\u0cb8\u0ccd\u0caf\u0cbe\u0cb9\u0cbe\u0cb0\u0cbf). \u0c85\u0cb2\u0cb0\u0ccd\u0c9c\u0cbf\u0ca8\u0ccd: gluten (\u0ca6\u0cc3\u0cb6\u0ccd\u0caf \u0c85\u0c82\u0ca6\u0cbe\u0c9c\u0cc1 \u0cae\u0cbe\u0ca4\u0ccd\u0cb0). \u0cb8\u0cc1\u0cb0\u0c95\u0ccd\u0cb7\u0cbf\u0ca4 \u0cb8\u0cae\u0caf: 08:00 AM. \u0cb8\u0c82\u0c97\u0ccd\u0cb0\u0cb9\u0ca3\u0cbe \u0caa\u0ccd\u0cb0\u0ca6\u0cc7\u0cb6: \u0caf\u0cb2\u0cb9\u0c82\u0c95. \u0cb8\u0ccd\u0cb5\u0cc0\u0c95\u0cb0\u0cbf\u0cb8\u0cb2\u0cc1 ACCEPT \u0c85\u0ca5\u0cb5\u0cbe \u0ca4\u0cbf\u0cb0\u0cb8\u0ccd\u0c95\u0cb0\u0cbf\u0cb8\u0cb2\u0cc1 DECLINE \u0c8e\u0c82\u0ca6\u0cc1 \u0c89\u0ca4\u0ccd\u0ca4\u0cb0\u0cbf\u0cb8\u0cbf."
+  }
+}

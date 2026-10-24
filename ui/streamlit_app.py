@@ -185,14 +185,37 @@ def main() -> None:
         )
         st.session_state["lang"] = lang_code
 
-        # 2. LLM Engine Mode Indicator
+        # 2. LLM Engine Mode & Quota Health
         cfg = get_config()
         llm_client = LLMClient()
-        mode_val = llm_client.mode.upper()
-        if mode_val == "LIVE":
+        health = llm_client.get_health_status()
+        eff_mode = health["effective_mode"].upper()
+
+        if health["quota_exhausted"]:
+            st.warning("⚠️ Free-Tier Quota Reached: Operating in offline fallback mode.")
+        elif health["near_quota"]:
+            st.info("ℹ️ Free-Tier Quota Soft Limit: Operating in cache-only mode.")
+
+        if eff_mode == "LIVE":
             st.success("🟢 AI Mode: LIVE (Gemini API)")
+        elif eff_mode == "REPLAY":
+            st.info("🟣 AI Mode: REPLAY (Offline Fixtures)")
+        elif eff_mode == "CACHE_ONLY":
+            st.warning("🟡 AI Mode: CACHE-ONLY (Quota Guard)")
+        elif eff_mode == "FALLBACK":
+            st.warning("🟠 AI Mode: FALLBACK (Deterministic)")
         else:
             st.info("🔵 AI Mode: MOCK (Deterministic)")
+
+        with st.expander("🩺 System Health & Quota", expanded=False):
+            st.markdown(f"**Calls Today:** `{health['daily_calls']} / {health['daily_budget']}`")
+            st.markdown(f"**Total Invocations:** `{health['total_calls']}`")
+            st.markdown(f"**Cache Hit Rate:** `{health['cache_hit_rate_pct']}%`")
+            st.markdown(f"**Avg Latency:** `{health['avg_latency_ms']} ms`")
+            if health.get("last_error"):
+                st.caption(f"Last error: {health['last_error']}")
+            else:
+                st.caption("Status: Healthy (zero recent errors)")
 
         st.markdown("---")
 

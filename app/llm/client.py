@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Type, TypeVar, Union
@@ -112,20 +113,44 @@ class DiskCache:
 
 @dataclass
 class CallCounters:
-    """Tracks LLM usage across execution."""
+    """Tracks LLM usage, quota limits, latency, and cache hits across execution."""
     total_calls: int = 0
     live_calls: int = 0
     mock_calls: int = 0
     cached_calls: int = 0
     failed_calls: int = 0
+    replay_calls: int = 0
+    fallback_calls: int = 0
+    daily_calls: int = 0
+    total_latency_seconds: float = 0.0
+    last_latency_ms: float = 0.0
+    last_error: Optional[str] = None
 
-    def as_dict(self) -> Dict[str, int]:
+    def avg_latency_ms(self) -> float:
+        """Return average call latency in milliseconds."""
+        if self.total_calls > 0:
+            return (self.total_latency_seconds / self.total_calls) * 1000.0
+        return 0.0
+
+    def cache_hit_rate(self) -> float:
+        """Return percentage of calls fulfilled by cache."""
+        if self.total_calls > 0:
+            return (self.cached_calls / self.total_calls) * 100.0
+        return 0.0
+
+    def as_dict(self) -> Dict[str, Any]:
         return {
             "total_calls": self.total_calls,
             "live_calls": self.live_calls,
             "mock_calls": self.mock_calls,
             "cached_calls": self.cached_calls,
             "failed_calls": self.failed_calls,
+            "replay_calls": self.replay_calls,
+            "fallback_calls": self.fallback_calls,
+            "daily_calls": self.daily_calls,
+            "avg_latency_ms": round(self.avg_latency_ms(), 2),
+            "last_latency_ms": round(self.last_latency_ms, 2),
+            "last_error": self.last_error,
         }
 
     def reset(self) -> None:
@@ -134,6 +159,12 @@ class CallCounters:
         self.mock_calls = 0
         self.cached_calls = 0
         self.failed_calls = 0
+        self.replay_calls = 0
+        self.fallback_calls = 0
+        self.daily_calls = 0
+        self.total_latency_seconds = 0.0
+        self.last_latency_ms = 0.0
+        self.last_error = None
 
 
 def _build_mock_structured(schema: Type[T], seed_text: str = "") -> T:
@@ -219,6 +250,48 @@ class LLMClient:
     def mode(self) -> str:
         return self.config.llm.mode
 
+    @property
+    def effective_mode(self) -> str:
+        """Dynamically determine operating mode based on configuration and quota budget."""
+        base = self.config.llm.mode.lower()
+        if base in ("mock", "replay", "fallback"):
+            return base
+        daily_budget = getattr(self.config.llm, "daily_call_budget", 100)
+        soft_pct = getattr(self.config.llm, "soft_budget_threshold_pct", 0.85)
+        if self.counters.daily_calls >= daily_budget:
+            return "fallback"
+        if self.counters.daily_calls >= int(daily_budget * soft_pct):
+            return "cache_only"
+        return base
+
+    def get_health_status(self) -> Dict[str, Any]:
+        """Return system health, quota consumption, latency, and error status."""
+        daily_budget = getattr(self.config.llm, "daily_call_budget", 100)
+        soft_pct = getattr(self.config.llm, "soft_budget_threshold_pct", 0.85)
+        is_near = self.counters.daily_calls >= int(daily_budget * soft_pct)
+        is_exhausted = self.counters.daily_calls >= daily_budget
+        return {
+            "configured_mode": self.config.llm.mode,
+            "effective_mode": self.effective_mode,
+            "total_calls": self.counters.total_calls,
+            "daily_calls": self.counters.daily_calls,
+            "daily_budget": daily_budget,
+            "remaining_budget": max(0, daily_budget - self.counters.daily_calls),
+            "near_quota": is_near,
+            "quota_exhausted": is_exhausted,
+            "cache_hit_rate_pct": round(self.counters.cache_hit_rate(), 1),
+            "avg_latency_ms": round(self.counters.avg_latency_ms(), 1),
+            "last_latency_ms": round(self.counters.last_latency_ms, 1),
+            "last_error": self.counters.last_error,
+            "counters": self.counters.as_dict(),
+        }
+
+    def _record_timing(self, start_time: float) -> None:
+        """Update last and cumulative latency measurements."""
+        elapsed = time.perf_counter() - start_time
+        self.counters.last_latency_ms = elapsed * 1000.0
+        self.counters.total_latency_seconds += elapsed
+
     def _get_genai_client(self) -> Any:
         """Lazily initialize google-genai client."""
         if self._genai_client is None:
@@ -233,11 +306,15 @@ class LLMClient:
         candidates = []
         if fixture_name:
             candidates.extend([
+                Path("tests/fixtures/recordings") / f"{fixture_name}.json",
+                Path("fixtures/recordings") / f"{fixture_name}.json",
                 Path("tests/fixtures") / f"{fixture_name}.json",
                 Path("fixtures") / f"{fixture_name}.json",
                 Path(fixture_name),
             ])
         candidates.extend([
+            Path("tests/fixtures/recordings") / f"{key}.json",
+            Path("fixtures/recordings") / f"{key}.json",
             Path("tests/fixtures") / f"{key}.json",
             Path("fixtures") / f"{key}.json",
         ])
@@ -258,9 +335,10 @@ class LLMClient:
         system_instruction: Optional[str] = None,
         fixture_name: Optional[str] = None,
     ) -> str:
-        """Generate text from a prompt, honoring mock mode, cache, and rate limit."""
+        """Generate text from a prompt, honoring quota guard, mock/replay modes, cache, and rate limit."""
         target_model = model or self.config.llm.models.MODEL_FAST
         self.counters.total_calls += 1
+        start_time = time.perf_counter()
 
         cache_key = self.cache.compute_key(
             model=target_model,
@@ -271,13 +349,36 @@ class LLMClient:
         cached = self.cache.get(cache_key)
         if cached is not None and isinstance(cached, dict) and "text" in cached:
             self.counters.cached_calls += 1
+            self._record_timing(start_time)
             return cached["text"]
 
-        # Enforce rate limiter in live mode
-        if self.mode != "mock":
-            self.rate_limiter.acquire()
+        eff_mode = self.effective_mode
 
-        if self.mode == "mock":
+        # Fallback or cache_only without cache hit:
+        if eff_mode in ("fallback", "cache_only"):
+            self.counters.fallback_calls += 1
+            fixture_data = self._lookup_fixture(cache_key, fixture_name)
+            self._record_timing(start_time)
+            if fixture_data and isinstance(fixture_data, dict) and "text" in fixture_data:
+                return fixture_data["text"]
+            elif isinstance(fixture_data, str):
+                return fixture_data
+            prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:8]
+            return f"[FALLBACK:{prompt_hash}] Deterministic response for prompt: {prompt[:60]}..."
+
+        # Replay mode:
+        if eff_mode == "replay":
+            self.counters.replay_calls += 1
+            fixture_data = self._lookup_fixture(cache_key, fixture_name)
+            self._record_timing(start_time)
+            if fixture_data and isinstance(fixture_data, dict) and "text" in fixture_data:
+                return fixture_data["text"]
+            elif isinstance(fixture_data, str):
+                return fixture_data
+            prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:8]
+            return f"[REPLAY:{prompt_hash}] Replay fixture for prompt: {prompt[:60]}..."
+
+        if eff_mode == "mock":
             self.counters.mock_calls += 1
             fixture_data = self._lookup_fixture(cache_key, fixture_name)
             if fixture_data and isinstance(fixture_data, dict) and "text" in fixture_data:
@@ -289,15 +390,31 @@ class LLMClient:
                 result = f"[MOCK:{prompt_hash}] Response for prompt: {prompt[:60]}..."
 
             self.cache.set(cache_key, {"text": result})
+            self._record_timing(start_time)
             return result
 
         # Live Mode
-        return self._live_generate_text(
-            prompt=prompt,
-            model=target_model,
-            system_instruction=system_instruction,
-            cache_key=cache_key,
-        )
+        self.rate_limiter.acquire()
+        try:
+            res = self._live_generate_text(
+                prompt=prompt,
+                model=target_model,
+                system_instruction=system_instruction,
+                cache_key=cache_key,
+            )
+            self.counters.daily_calls += 1
+            self._record_timing(start_time)
+            return res
+        except Exception as e:
+            self.counters.last_error = str(e)
+            self._record_timing(start_time)
+            fixture_data = self._lookup_fixture(cache_key, fixture_name)
+            if fixture_data and isinstance(fixture_data, dict) and "text" in fixture_data:
+                return fixture_data["text"]
+            elif isinstance(fixture_data, str):
+                return fixture_data
+            prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:8]
+            return f"[FALLBACK:{prompt_hash}] Fallback response for prompt: {prompt[:60]}..."
 
     @retry(
         stop=stop_after_attempt(3),
@@ -341,6 +458,7 @@ class LLMClient:
         """Generate structured Pydantic object, validated against schema."""
         target_model = model or self.config.llm.models.MODEL_FAST
         self.counters.total_calls += 1
+        start_time = time.perf_counter()
 
         schema_name = getattr(schema, "__name__", "Model")
         cache_key = self.cache.compute_key(
@@ -352,12 +470,32 @@ class LLMClient:
         cached = self.cache.get(cache_key)
         if cached is not None and isinstance(cached, dict) and "data" in cached:
             self.counters.cached_calls += 1
+            self._record_timing(start_time)
             return schema.model_validate(cached["data"])
 
-        if self.mode != "mock":
-            self.rate_limiter.acquire()
+        eff_mode = self.effective_mode
 
-        if self.mode == "mock":
+        # Fallback or cache_only without cache hit:
+        if eff_mode in ("fallback", "cache_only"):
+            self.counters.fallback_calls += 1
+            fixture_data = self._lookup_fixture(cache_key, fixture_name)
+            self._record_timing(start_time)
+            if fixture_data is not None:
+                data = fixture_data.get("data", fixture_data) if isinstance(fixture_data, dict) else fixture_data
+                return schema.model_validate(data)
+            return _build_mock_structured(schema, seed_text=prompt)
+
+        # Replay mode:
+        if eff_mode == "replay":
+            self.counters.replay_calls += 1
+            fixture_data = self._lookup_fixture(cache_key, fixture_name)
+            self._record_timing(start_time)
+            if fixture_data is not None:
+                data = fixture_data.get("data", fixture_data) if isinstance(fixture_data, dict) else fixture_data
+                return schema.model_validate(data)
+            return _build_mock_structured(schema, seed_text=prompt)
+
+        if eff_mode == "mock":
             self.counters.mock_calls += 1
             fixture_data = self._lookup_fixture(cache_key, fixture_name)
             if fixture_data is not None:
@@ -370,16 +508,30 @@ class LLMClient:
                 parsed = _build_mock_structured(schema, seed_text=prompt)
 
             self.cache.set(cache_key, {"data": parsed.model_dump()})
+            self._record_timing(start_time)
             return parsed
 
         # Live Mode
-        return self._live_generate_structured(
-            prompt=prompt,
-            schema=schema,
-            model=target_model,
-            system_instruction=system_instruction,
-            cache_key=cache_key,
-        )
+        self.rate_limiter.acquire()
+        try:
+            res = self._live_generate_structured(
+                prompt=prompt,
+                schema=schema,
+                model=target_model,
+                system_instruction=system_instruction,
+                cache_key=cache_key,
+            )
+            self.counters.daily_calls += 1
+            self._record_timing(start_time)
+            return res
+        except Exception as e:
+            self.counters.last_error = str(e)
+            self._record_timing(start_time)
+            fixture_data = self._lookup_fixture(cache_key, fixture_name)
+            if fixture_data is not None:
+                data = fixture_data.get("data", fixture_data) if isinstance(fixture_data, dict) else fixture_data
+                return schema.model_validate(data)
+            return _build_mock_structured(schema, seed_text=prompt)
 
     @retry(
         stop=stop_after_attempt(3),
@@ -429,6 +581,7 @@ class LLMClient:
         """Process multimodal vision queries with 1 or more images."""
         target_model = model or self.config.llm.models.MODEL_VISION
         self.counters.total_calls += 1
+        start_time = time.perf_counter()
 
         # Read image bytes for cache key computation
         raw_bytes_list: List[bytes] = []
@@ -454,15 +607,45 @@ class LLMClient:
         cached = self.cache.get(cache_key)
         if cached is not None and isinstance(cached, dict):
             self.counters.cached_calls += 1
+            self._record_timing(start_time)
             if schema and "data" in cached:
                 return schema.model_validate(cached["data"])
             elif "text" in cached:
                 return cached["text"]
 
-        if self.mode != "mock":
-            self.rate_limiter.acquire()
+        eff_mode = self.effective_mode
 
-        if self.mode == "mock":
+        # Fallback or cache_only without cache hit:
+        if eff_mode in ("fallback", "cache_only"):
+            self.counters.fallback_calls += 1
+            fixture_data = self._lookup_fixture(cache_key, fixture_name)
+            self._record_timing(start_time)
+            if fixture_data is not None:
+                if schema:
+                    data = fixture_data.get("data", fixture_data) if isinstance(fixture_data, dict) else fixture_data
+                    return schema.model_validate(data)
+                return fixture_data.get("text", str(fixture_data)) if isinstance(fixture_data, dict) else str(fixture_data)
+            if schema:
+                return _build_mock_structured(schema, seed_text=prompt)
+            prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:8]
+            return f"[FALLBACK_VISION:{prompt_hash}] Fallback vision response."
+
+        # Replay mode:
+        if eff_mode == "replay":
+            self.counters.replay_calls += 1
+            fixture_data = self._lookup_fixture(cache_key, fixture_name)
+            self._record_timing(start_time)
+            if fixture_data is not None:
+                if schema:
+                    data = fixture_data.get("data", fixture_data) if isinstance(fixture_data, dict) else fixture_data
+                    return schema.model_validate(data)
+                return fixture_data.get("text", str(fixture_data)) if isinstance(fixture_data, dict) else str(fixture_data)
+            if schema:
+                return _build_mock_structured(schema, seed_text=prompt)
+            prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:8]
+            return f"[REPLAY_VISION:{prompt_hash}] Replay vision response."
+
+        if eff_mode == "mock":
             self.counters.mock_calls += 1
             fixture_data = self._lookup_fixture(cache_key, fixture_name)
             if fixture_data is not None:
@@ -470,31 +653,53 @@ class LLMClient:
                     data = fixture_data.get("data", fixture_data) if isinstance(fixture_data, dict) else fixture_data
                     result = schema.model_validate(data)
                     self.cache.set(cache_key, {"data": result.model_dump()})
+                    self._record_timing(start_time)
                     return result
                 else:
                     result_text = fixture_data.get("text", str(fixture_data)) if isinstance(fixture_data, dict) else str(fixture_data)
                     self.cache.set(cache_key, {"text": result_text})
+                    self._record_timing(start_time)
                     return result_text
 
             if schema:
                 result = _build_mock_structured(schema, seed_text=prompt)
                 self.cache.set(cache_key, {"data": result.model_dump()})
+                self._record_timing(start_time)
                 return result
             else:
                 prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:8]
                 result_text = f"[MOCK_VISION:{prompt_hash}] Vision response for {len(images)} image(s)."
                 self.cache.set(cache_key, {"text": result_text})
+                self._record_timing(start_time)
                 return result_text
 
         # Live vision call
-        return self._live_generate_with_images(
-            prompt=prompt,
-            raw_bytes_list=raw_bytes_list,
-            schema=schema,
-            model=target_model,
-            system_instruction=system_instruction,
-            cache_key=cache_key,
-        )
+        self.rate_limiter.acquire()
+        try:
+            res = self._live_generate_with_images(
+                prompt=prompt,
+                raw_bytes_list=raw_bytes_list,
+                schema=schema,
+                model=target_model,
+                system_instruction=system_instruction,
+                cache_key=cache_key,
+            )
+            self.counters.daily_calls += 1
+            self._record_timing(start_time)
+            return res
+        except Exception as e:
+            self.counters.last_error = str(e)
+            self._record_timing(start_time)
+            fixture_data = self._lookup_fixture(cache_key, fixture_name)
+            if fixture_data is not None:
+                if schema:
+                    data = fixture_data.get("data", fixture_data) if isinstance(fixture_data, dict) else fixture_data
+                    return schema.model_validate(data)
+                return fixture_data.get("text", str(fixture_data)) if isinstance(fixture_data, dict) else str(fixture_data)
+            if schema:
+                return _build_mock_structured(schema, seed_text=prompt)
+            prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:8]
+            return f"[FALLBACK_VISION:{prompt_hash}] Fallback vision response."
 
     @retry(
         stop=stop_after_attempt(3),
@@ -558,6 +763,7 @@ class LLMClient:
         """Compute embedding vector for text."""
         target_model = model or self.config.llm.models.MODEL_EMBED
         self.counters.total_calls += 1
+        start_time = time.perf_counter()
 
         cache_key = self.cache.compute_key(
             model=target_model,
@@ -568,23 +774,42 @@ class LLMClient:
         cached = self.cache.get(cache_key)
         if cached is not None and isinstance(cached, dict) and "embedding" in cached:
             self.counters.cached_calls += 1
+            self._record_timing(start_time)
             return cached["embedding"]
 
-        if self.mode != "mock":
-            self.rate_limiter.acquire()
+        eff_mode = self.effective_mode
 
-        if self.mode == "mock":
-            self.counters.mock_calls += 1
+        if eff_mode in ("fallback", "cache_only", "replay", "mock"):
+            if eff_mode == "replay":
+                self.counters.replay_calls += 1
+            elif eff_mode in ("fallback", "cache_only"):
+                self.counters.fallback_calls += 1
+            else:
+                self.counters.mock_calls += 1
+
             fixture_data = self._lookup_fixture(cache_key, fixture_name)
             if fixture_data and isinstance(fixture_data, dict) and "embedding" in fixture_data:
                 vec = fixture_data["embedding"]
             else:
                 vec = _pseudo_embed(text)
             self.cache.set(cache_key, {"embedding": vec})
+            self._record_timing(start_time)
             return vec
 
         # Live Mode
-        return self._live_embed(text=text, model=target_model, cache_key=cache_key)
+        self.rate_limiter.acquire()
+        try:
+            vec = self._live_embed(text=text, model=target_model, cache_key=cache_key)
+            self.counters.daily_calls += 1
+            self._record_timing(start_time)
+            return vec
+        except Exception as e:
+            self.counters.last_error = str(e)
+            self._record_timing(start_time)
+            fixture_data = self._lookup_fixture(cache_key, fixture_name)
+            if fixture_data and isinstance(fixture_data, dict) and "embedding" in fixture_data:
+                return fixture_data["embedding"]
+            return _pseudo_embed(text)
 
     @retry(
         stop=stop_after_attempt(3),

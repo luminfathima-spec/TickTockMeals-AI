@@ -112,7 +112,7 @@ def assess_safety(
     llm_risk = rules_risk
     extra_flags: List[str] = []
 
-    if active_mode == "mock":
+    if active_mode in ("mock", "replay"):
         # Deterministic mock response
         citation_ids = ", ".join([f"[{c.id}]" for c in citations[:2]]) if citations else "[rules only]"
         explanation = (
@@ -121,6 +121,10 @@ def assess_safety(
             f"Mandatory temperature check recommended prior to handover."
         )
         reasons.append(explanation)
+    elif active_mode in ("fallback", "offline"):
+        reasons.append("rules only: Evaluated strictly through deterministic rules engine (LLM synthesis disabled).")
+        if not citations:
+            citations.append(Citation(id="rules_only", source="FSSAI Guidelines & Rule Engine"))
     else:
         # Live LLM execution
         dishes_desc = ", ".join(
@@ -148,7 +152,9 @@ def assess_safety(
             extra_flags = llm_res.extra_caution_flags
         except Exception:
             # Fallback to rules only
-            reasons.append("Guidance advisory generated via deterministic rules (LLM synthesis unavailable).")
+            reasons.append("rules only: Guidance advisory generated via deterministic rules (LLM synthesis unavailable).")
+            if not citations:
+                citations.append(Citation(id="rules_only", source="FSSAI Guidelines & Rule Engine"))
 
     # 4. Enforce Asymmetric Guardrail Merge
     # LLM can only make things SAFER (increase risk: LOW -> MEDIUM -> HIGH).
