@@ -18,6 +18,7 @@ from app.db import (
     create_donor,
     create_historical_listing,
     create_recipient,
+    create_sos_request,
     create_volunteer,
     get_connection,
     init_db,
@@ -27,6 +28,9 @@ from app.models import (
     DonorKind,
     HistoricalListing,
     Recipient,
+    SOSRequest,
+    SOSStatus,
+    SOSUrgency,
     Tier,
     VehicleType,
     Volunteer,
@@ -412,6 +416,88 @@ def get_seed_volunteers() -> List[Volunteer]:
     ]
 
 
+def get_seed_sos_requests() -> List[SOSRequest]:
+    """Return realistic community food SOS requests from shelters and hunger clusters."""
+    base_time = datetime(2026, 10, 24, 18, 0, 0)
+    return [
+        SOSRequest(
+            id="sos_01",
+            requester_name="Shanti Bhavan Children Home",
+            requester_type="orphanage",
+            portions_needed=50,
+            veg_only=True,
+            address="Kattigenahalli, Yelahanka",
+            lat=13.1120,
+            lon=77.6040,
+            needed_by=base_time + timedelta(hours=2, minutes=30),
+            urgency=SOSUrgency.CRITICAL,
+            status=SOSStatus.OPEN,
+            contact_phone="9845012345",
+            notes="Dinner for 50 resident children. Pure vegetarian meals needed before 8:30 PM.",
+        ),
+        SOSRequest(
+            id="sos_02",
+            requester_name="Bellary Road Destitute Night Shelter",
+            requester_type="shelter",
+            portions_needed=65,
+            veg_only=False,
+            address="Near Hebbal Flyover Underpass, Hebbal",
+            lat=13.0360,
+            lon=77.5890,
+            needed_by=base_time + timedelta(hours=3),
+            urgency=SOSUrgency.CRITICAL,
+            status=SOSStatus.OPEN,
+            contact_phone="9845098765",
+            notes="Night shelter intake at 8:30 PM. Hot meals or rice/curry packets urgently required.",
+        ),
+        SOSRequest(
+            id="sos_03",
+            requester_name="Thanisandra Daily Wage Worker Camp",
+            requester_type="slum_cluster",
+            portions_needed=80,
+            veg_only=False,
+            address="Thanisandra Main Road, Nagavara",
+            lat=13.0480,
+            lon=77.6250,
+            needed_by=base_time + timedelta(hours=3, minutes=30),
+            urgency=SOSUrgency.HIGH,
+            status=SOSStatus.OPEN,
+            contact_phone="9845112233",
+            notes="80 migrant labor families without kitchen facilities. Bulk rice, dal, or chapatis welcome.",
+        ),
+        SOSRequest(
+            id="sos_04",
+            requester_name="Sneha Jyothi Senior Citizens Home",
+            requester_type="shelter",
+            portions_needed=30,
+            veg_only=True,
+            address="Jakkur Green Garden Layout",
+            lat=13.0780,
+            lon=77.6050,
+            needed_by=base_time + timedelta(hours=2),
+            urgency=SOSUrgency.HIGH,
+            status=SOSStatus.OPEN,
+            contact_phone="9845223344",
+            notes="Elderly care home dinner. Mildly spiced, soft cooked meals preferred.",
+        ),
+        SOSRequest(
+            id="sos_05",
+            requester_name="Vidya Deepa Destitute Orphanage",
+            requester_type="orphanage",
+            portions_needed=40,
+            veg_only=False,
+            address="Kogilu Cross, Yelahanka",
+            lat=13.1250,
+            lon=77.6180,
+            needed_by=base_time + timedelta(hours=2, minutes=15),
+            urgency=SOSUrgency.CRITICAL,
+            status=SOSStatus.OPEN,
+            contact_phone="9845334455",
+            notes="Cook called in sick today; 40 school-going children need warm evening dinner.",
+        ),
+    ]
+
+
 def generate_history(
     start_date: Optional[datetime] = None,
     days: int = 30,
@@ -599,6 +685,7 @@ def seed_database(
             with conn:
                 conn.executescript(
                     """
+                    DROP TABLE IF EXISTS sos_requests;
                     DROP TABLE IF EXISTS historical_listings;
                     DROP TABLE IF EXISTS audit_events;
                     DROP TABLE IF EXISTS outbox_messages;
@@ -614,6 +701,7 @@ def seed_database(
         donors = get_seed_donors()
         recipients = get_seed_recipients()
         volunteers = get_seed_volunteers()
+        sos_requests = get_seed_sos_requests()
         history = generate_history(seed=seed)
 
         for d in donors:
@@ -625,6 +713,9 @@ def seed_database(
         for v in volunteers:
             create_volunteer(v, conn=conn)
 
+        for s in sos_requests:
+            create_sos_request(s, conn=conn)
+
         for h in history:
             create_historical_listing(h, conn=conn)
 
@@ -632,6 +723,7 @@ def seed_database(
             "donors": len(donors),
             "recipients": len(recipients),
             "volunteers": len(volunteers),
+            "sos_requests": len(sos_requests),
             "historical_listings": len(history),
         }
 

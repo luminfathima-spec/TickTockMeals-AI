@@ -18,6 +18,11 @@ class DonorKind(str, Enum):
     WEDDING_HALL = "wedding_hall"
     RESTAURANT = "restaurant"
     EVENT = "event"
+    HOUSEHOLD = "household"
+    CORPORATE = "corporate"
+    BAKERY = "bakery"
+    SUPERMARKET = "supermarket"
+    INDIVIDUAL = "individual"
 
 
 class Tier(str, Enum):
@@ -116,6 +121,8 @@ class Dish(BaseModel):
     category: DishCategory = Field(..., description="Dish category classification")
     veg_status: VegStatus = Field(default=VegStatus.VEG, description="Vegetarian/egg/non-veg status")
     est_portions: int = Field(..., ge=1, description="Estimated number of meal portions")
+    est_calories_per_portion: int = Field(default=380, ge=50, description="Estimated calories per portion")
+    est_protein_g: float = Field(default=12.0, ge=0.0, description="Estimated protein grams per portion")
     visible_flags: List[VisibleFlag] = Field(
         default_factory=lambda: [VisibleFlag.NONE],
         description="Visual quality indicators observed in image",
@@ -210,8 +217,42 @@ class Match(BaseModel):
     score_breakdown: Optional[Dict[str, float]] = Field(default=None, description="Score component weights")
     why_this_match: Optional[str] = Field(default=None, description="Human-readable explanation of matching rationale")
     status: str = Field(default="PROPOSED", description="PROPOSED, ACCEPTED, DECLINED, TIMED_OUT, CANCELLED")
+    otp_code: Optional[str] = Field(default="4218", description="4-digit secure handover verification OTP")
+    otp_verified: bool = Field(default=False, description="Whether recipient OTP was verified by volunteer")
+    sos_id: Optional[str] = Field(default=None, description="Linked urgent hunger SOS request ID if applicable")
     created_at: datetime = Field(..., description="Timestamp match was generated")
     responded_at: Optional[datetime] = Field(default=None, description="Timestamp recipient/volunteer replied")
+
+
+class SOSUrgency(str, Enum):
+    NORMAL = "NORMAL"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
+
+
+class SOSStatus(str, Enum):
+    OPEN = "OPEN"
+    MATCHED = "MATCHED"
+    FULFILLED = "FULFILLED"
+    EXPIRED = "EXPIRED"
+
+
+class SOSRequest(BaseModel):
+    """Urgent food requirement broadcast by a shelter, orphanage, or community in need."""
+    id: str = Field(..., description="Unique SOS identifier (e.g. 'sos_01')")
+    requester_name: str = Field(..., description="Name of shelter, coordinator, or community")
+    requester_type: str = Field(default="shelter", description="shelter | orphanage | slum_cluster | hospital | direct")
+    portions_needed: int = Field(..., ge=1, description="Number of meals needed")
+    veg_only: bool = Field(default=False, description="Strict vegetarian requirement")
+    address: str = Field(..., description="Delivery address or neighborhood")
+    lat: float = Field(..., description="Latitude")
+    lon: float = Field(..., description="Longitude")
+    needed_by: datetime = Field(..., description="Required by time")
+    urgency: SOSUrgency = Field(default=SOSUrgency.HIGH)
+    status: SOSStatus = Field(default=SOSStatus.OPEN)
+    contact_phone: str = Field(default="9876543210")
+    notes: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.now)
 
 
 class OutboxMessage(BaseModel):

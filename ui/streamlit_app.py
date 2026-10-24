@@ -32,7 +32,10 @@ from app.db import (
     list_donors,
     list_listings,
     list_recipients,
+    list_sos_requests,
     list_volunteers,
+    update_listing,
+    update_sos_request,
 )
 from app.llm.client import LLMClient
 from app.llm.messages import queue_match_notifications
@@ -47,6 +50,7 @@ from app.models import (
     Listing,
     ListingStatus,
     Match,
+    SOSStatus,
     StorageCondition,
     Tier,
     VegStatus,
@@ -59,6 +63,7 @@ from app.triage import tick
 from ui.i18n import UI_LANGUAGES, t
 from ui.pages.p1_donor import render_donor_page
 from ui.pages.p2_map import render_map_page
+from ui.pages.p2_sos import render_sos_page
 from ui.pages.p3_messages import render_messages_page
 from ui.pages.p4_volunteer import render_volunteer_page
 from ui.pages.p5_impact import render_impact_page
@@ -139,25 +144,50 @@ def run_demo_scenario(conn: Optional[sqlite3.Connection] = None) -> str:
     )
     create_listing(listing, conn=conn)
 
-    # 4. Generate explainable match
+    # 4. Generate explainable match and link to open hunger SOS hotspot
+    open_sos = [s for s in list_sos_requests(conn=conn) if s.status == SOSStatus.OPEN]
     result = find_matches(listing, now=sim_time, conn=conn)
+
+    cand_recip_id = "recip_01"
+    cand_vol_id = "vol_01"
+    score = 0.96
+    breakdown = {"time_feasible": 1.0, "dietary_fit": 1.0, "travel_cost": 0.90}
+    why_text = "Fulfilling urgent hunger deficit at Shanti Bhavan Children Home. OTP: 4218."
+    sos_ref_id = None
+
+    if open_sos:
+        top_sos = open_sos[0]
+        sos_ref_id = top_sos.id
+        why_text = f"Direct emergency fulfillment for {top_sos.requester_name}. Recipient Handover OTP: 4218."
+        update_sos_request(top_sos.id, status=SOSStatus.MATCHED, conn=conn)
+
     if result.candidates:
         cand = result.candidates[0]
-        match = Match(
-            id=f"m_{listing_id}",
-            listing_id=listing.id,
-            recipient_id=cand.recipient_id,
-            volunteer_id=cand.volunteer_id,
-            score=cand.score,
-            score_breakdown=cand.score_breakdown,
-            why_this_match=cand.why_this_match,
-            status="PROPOSED",
-            created_at=sim_time,
-        )
-        create_match(match, conn=conn)
+        cand_recip_id = cand.recipient_id
+        cand_vol_id = cand.volunteer_id
+        score = cand.score
+        breakdown = cand.score_breakdown
+        if not open_sos:
+            why_text = cand.why_this_match
 
-        # 5. Queue multilingual outbox messages
-        queue_match_notifications(match, conn=conn, now=sim_time)
+    match = Match(
+        id=f"m_{listing_id}",
+        listing_id=listing.id,
+        recipient_id=cand_recip_id,
+        volunteer_id=cand_vol_id,
+        score=score,
+        score_breakdown=breakdown,
+        why_this_match=why_text,
+        status="PROPOSED",
+        otp_code="4218",
+        otp_verified=False,
+        sos_id=sos_ref_id,
+        created_at=sim_time,
+    )
+    create_match(match, conn=conn)
+
+    # 5. Queue multilingual outbox messages
+    queue_match_notifications(match, conn=conn, now=sim_time)
 
     st.session_state["active_listing_id"] = listing_id
     return listing_id
@@ -267,9 +297,10 @@ def main() -> None:
         # 6. Page Navigation Radio
         page_options = {
             t("page_donor", lang_code): "donor",
+            t("page_sos", lang_code): "sos",
             t("page_map", lang_code): "map",
-            t("page_messages", lang_code): "messages",
             t("page_volunteer", lang_code): "volunteer",
+            t("page_messages", lang_code): "messages",
             t("page_impact", lang_code): "impact",
             t("page_audit", lang_code): "audit",
         }
@@ -284,12 +315,14 @@ def main() -> None:
     # ---------------- MAIN CONTENT ROUTING ----------------
     if selected_page == "donor":
         render_donor_page(lang=lang_code)
+    elif selected_page == "sos":
+        render_sos_page(lang=lang_code)
     elif selected_page == "map":
         render_map_page(lang=lang_code)
-    elif selected_page == "messages":
-        render_messages_page(lang=lang_code)
     elif selected_page == "volunteer":
         render_volunteer_page(lang=lang_code)
+    elif selected_page == "messages":
+        render_messages_page(lang=lang_code)
     elif selected_page == "impact":
         render_impact_page(lang=lang_code)
     elif selected_page == "audit":

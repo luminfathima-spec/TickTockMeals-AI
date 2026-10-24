@@ -13,6 +13,7 @@ from app.db import (
     list_donors,
     list_listings,
     list_recipients,
+    list_sos_requests,
     list_volunteers,
 )
 from app.matching import find_matches
@@ -117,6 +118,22 @@ def render_map_page(lang: str = "en") -> None:
         for v in volunteers
     ]
 
+    # Hunger Hotspots (SOS Requests)
+    sos_requests = list_sos_requests(status="OPEN", conn=conn)
+    sos_data = [
+        {
+            "name": f"🆘 {s.requester_name} ({s.portions_needed} meals needed)",
+            "area": s.address,
+            "portions": s.portions_needed,
+            "urgency": s.urgency.value,
+            "lat": s.lat,
+            "lon": s.lon,
+            "color": [231, 76, 60, 240],  # Crimson Red
+            "radius": 240,
+        }
+        for s in sos_requests
+    ]
+
     # Pydeck Layers
     layers = [
         pdk.Layer(
@@ -147,6 +164,19 @@ def render_map_page(lang: str = "en") -> None:
             auto_highlight=True,
         ),
     ]
+
+    if sos_data:
+        layers.append(
+            pdk.Layer(
+                "ScatterplotLayer",
+                data=pd.DataFrame(sos_data),
+                get_position=["lon", "lat"],
+                get_color="color",
+                get_radius="radius",
+                pickable=True,
+                auto_highlight=True,
+            )
+        )
 
     if route_lines:
         layers.append(
@@ -180,12 +210,11 @@ def render_map_page(lang: str = "en") -> None:
     st.markdown(
         """
         **Map Legend:**
-        🟡 **Donors (Canteens/Halls)** |
-        🟢 **Human NGOs** |
-        🟣 **Animal Shelters** |
-        🟠 **Compost / Biogas Units** |
-        🔵 **Volunteers** |
-        ── **Optimal Dispatch Route**
+        🔴 **Urgent Hunger SOS Hotspots** |
+        🟡 **Surplus Food Donors** |
+        🟢 **Charity Shelters & Orphanages** |
+        🔵 **Volunteer Couriers** |
+        ── **Live Dispatch Route**
         """
     )
 

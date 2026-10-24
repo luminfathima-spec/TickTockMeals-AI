@@ -23,6 +23,9 @@ from app.models import (
     Match,
     OutboxMessage,
     Recipient,
+    SOSRequest,
+    SOSStatus,
+    SOSUrgency,
     Tier,
     VehicleType,
     Volunteer,
@@ -154,6 +157,23 @@ def init_db(conn_or_path: Optional[Union[sqlite3.Connection, str, Path]] = None)
                     outcome TEXT NOT NULL,
                     FOREIGN KEY (donor_id) REFERENCES donors(id) ON DELETE CASCADE
                 );
+
+                CREATE TABLE IF NOT EXISTS sos_requests (
+                    id TEXT PRIMARY KEY,
+                    requester_name TEXT NOT NULL,
+                    requester_type TEXT NOT NULL,
+                    portions_needed INTEGER NOT NULL,
+                    veg_only INTEGER NOT NULL,
+                    address TEXT NOT NULL,
+                    lat REAL NOT NULL,
+                    lon REAL NOT NULL,
+                    needed_by TEXT NOT NULL,
+                    urgency TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    contact_phone TEXT NOT NULL,
+                    notes TEXT,
+                    created_at TEXT NOT NULL
+                );
                 """
             )
             # Automatic column migration if database was created earlier
@@ -161,6 +181,16 @@ def init_db(conn_or_path: Optional[Union[sqlite3.Connection, str, Path]] = None)
             cols = [r["name"] for r in cur.fetchall()]
             if "actual_portions" not in cols:
                 conn.execute("ALTER TABLE listings ADD COLUMN actual_portions INTEGER")
+
+            # Check matches table columns
+            cur = conn.execute("PRAGMA table_info(matches)")
+            match_cols = [r["name"] for r in cur.fetchall()]
+            if "otp_code" not in match_cols:
+                conn.execute("ALTER TABLE matches ADD COLUMN otp_code TEXT DEFAULT '4218'")
+            if "otp_verified" not in match_cols:
+                conn.execute("ALTER TABLE matches ADD COLUMN otp_verified INTEGER DEFAULT 0")
+            if "sos_id" not in match_cols:
+                conn.execute("ALTER TABLE matches ADD COLUMN sos_id TEXT")
     finally:
         if close_after:
             conn.close()
@@ -546,9 +576,29 @@ def list_listings(
             c.close()
 
 
-def update_listing(listing: Listing, conn: Optional[sqlite3.Connection] = None) -> Listing:
+def update_listing(
+    listing_or_id: Union[Listing, str],
+    status: Optional[Union[ListingStatus, str]] = None,
+    tier: Optional[Union[Tier, str]] = None,
+    actual_portions: Optional[int] = None,
+    conn: Optional[sqlite3.Connection] = None,
+) -> Optional[Listing]:
     c = conn or get_connection()
     try:
+        if isinstance(listing_or_id, str):
+            target = get_listing(listing_or_id, conn=c)
+            if not target:
+                return None
+        else:
+            target = listing_or_id
+
+        if status is not None:
+            target.status = ListingStatus(status) if isinstance(status, str) else status
+        if tier is not None:
+            target.tier = Tier(tier) if isinstance(tier, str) else tier
+        if actual_portions is not None:
+            target.actual_portions = actual_portions
+
         with c:
             c.execute(
                 """
@@ -558,19 +608,19 @@ def update_listing(listing: Listing, conn: Optional[sqlite3.Connection] = None) 
                 WHERE id = ?
                 """,
                 (
-                    listing.donor_id,
-                    listing.created_at.isoformat(),
-                    listing.photo_path,
-                    json.dumps(listing.passport, default=str) if listing.passport else None,
-                    json.dumps(listing.safety, default=str) if listing.safety else None,
-                    listing.tier.value if isinstance(listing.tier, Tier) else str(listing.tier),
-                    listing.status.value,
-                    listing.expires_at.isoformat() if listing.expires_at else None,
-                    listing.actual_portions,
-                    listing.id,
+                    target.donor_id,
+                    target.created_at.isoformat(),
+                    target.photo_path,
+                    json.dumps(target.passport, default=str) if target.passport else None,
+                    json.dumps(target.safety, default=str) if target.safety else None,
+                    target.tier.value if isinstance(target.tier, Tier) else str(target.tier),
+                    target.status.value,
+                    target.expires_at.isoformat() if target.expires_at else None,
+                    target.actual_portions,
+                    target.id,
                 ),
             )
-        return listing
+        return target
     finally:
         if conn is None:
             c.close()
@@ -587,8 +637,9 @@ def create_match(match: Match, conn: Optional[sqlite3.Connection] = None) -> Mat
                 """
                 INSERT INTO matches (
                     id, listing_id, recipient_id, volunteer_id, score,
-                    score_breakdown, why_this_match, status, created_at, responded_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    score_breakdown, why_this_match, status, created_at, responded_at,
+                    otp_code, otp_verified, sos_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     match.id,
@@ -601,6 +652,9 @@ def create_match(match: Match, conn: Optional[sqlite3.Connection] = None) -> Mat
                     match.status,
                     match.created_at.isoformat(),
                     match.responded_at.isoformat() if match.responded_at else None,
+                    match.otp_code or "4218",
+                    1 if match.otp_verified else 0,
+                    match.sos_id,
                 ),
             )
         return match
@@ -616,6 +670,7 @@ def get_match(match_id: str, conn: Optional[sqlite3.Connection] = None) -> Optio
         row = cursor.fetchone()
         if not row:
             return None
+        keys = row.keys()
         return Match(
             id=row["id"],
             listing_id=row["listing_id"],
@@ -625,6 +680,9 @@ def get_match(match_id: str, conn: Optional[sqlite3.Connection] = None) -> Optio
             score_breakdown=json.loads(row["score_breakdown"]) if row["score_breakdown"] else None,
             why_this_match=row["why_this_match"],
             status=row["status"],
+            otp_code=row["otp_code"] if "otp_code" in keys else "4218",
+            otp_verified=bool(row["otp_verified"]) if "otp_verified" in keys else False,
+            sos_id=row["sos_id"] if "sos_id" in keys else None,
             created_at=datetime.fromisoformat(row["created_at"]),
             responded_at=datetime.fromisoformat(row["responded_at"]) if row["responded_at"] else None,
         )
@@ -640,21 +698,27 @@ def list_matches(listing_id: Optional[str] = None, conn: Optional[sqlite3.Connec
             cursor = c.execute("SELECT * FROM matches WHERE listing_id = ? ORDER BY score DESC", (listing_id,))
         else:
             cursor = c.execute("SELECT * FROM matches ORDER BY created_at DESC")
-        return [
-            Match(
-                id=r["id"],
-                listing_id=r["listing_id"],
-                recipient_id=r["recipient_id"],
-                volunteer_id=r["volunteer_id"],
-                score=r["score"],
-                score_breakdown=json.loads(r["score_breakdown"]) if r["score_breakdown"] else None,
-                why_this_match=r["why_this_match"],
-                status=r["status"],
-                created_at=datetime.fromisoformat(r["created_at"]),
-                responded_at=datetime.fromisoformat(r["responded_at"]) if r["responded_at"] else None,
+        results = []
+        for r in cursor.fetchall():
+            keys = r.keys()
+            results.append(
+                Match(
+                    id=r["id"],
+                    listing_id=r["listing_id"],
+                    recipient_id=r["recipient_id"],
+                    volunteer_id=r["volunteer_id"],
+                    score=r["score"],
+                    score_breakdown=json.loads(r["score_breakdown"]) if r["score_breakdown"] else None,
+                    why_this_match=r["why_this_match"],
+                    status=r["status"],
+                    otp_code=r["otp_code"] if "otp_code" in keys else "4218",
+                    otp_verified=bool(r["otp_verified"]) if "otp_verified" in keys else False,
+                    sos_id=r["sos_id"] if "sos_id" in keys else None,
+                    created_at=datetime.fromisoformat(r["created_at"]),
+                    responded_at=datetime.fromisoformat(r["responded_at"]) if r["responded_at"] else None,
+                )
             )
-            for r in cursor.fetchall()
-        ]
+        return results
     finally:
         if conn is None:
             c.close()
@@ -669,7 +733,8 @@ def update_match(match: Match, conn: Optional[sqlite3.Connection] = None) -> Mat
                 UPDATE matches SET
                     listing_id = ?, recipient_id = ?, volunteer_id = ?,
                     score = ?, score_breakdown = ?, why_this_match = ?,
-                    status = ?, created_at = ?, responded_at = ?
+                    status = ?, otp_code = ?, otp_verified = ?, sos_id = ?,
+                    created_at = ?, responded_at = ?
                 WHERE id = ?
                 """,
                 (
@@ -680,12 +745,160 @@ def update_match(match: Match, conn: Optional[sqlite3.Connection] = None) -> Mat
                     json.dumps(match.score_breakdown, default=str) if match.score_breakdown else None,
                     match.why_this_match,
                     match.status,
+                    match.otp_code or "4218",
+                    1 if match.otp_verified else 0,
+                    match.sos_id,
                     match.created_at.isoformat(),
                     match.responded_at.isoformat() if match.responded_at else None,
                     match.id,
                 ),
             )
         return match
+    finally:
+        if conn is None:
+            c.close()
+
+
+# ---------------- SOS Request CRUD ----------------
+
+def create_sos_request(sos: SOSRequest, conn: Optional[sqlite3.Connection] = None) -> SOSRequest:
+    c = conn or get_connection()
+    try:
+        with c:
+            c.execute(
+                """
+                INSERT INTO sos_requests (
+                    id, requester_name, requester_type, portions_needed, veg_only,
+                    address, lat, lon, needed_by, urgency, status, contact_phone, notes, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    sos.id,
+                    sos.requester_name,
+                    sos.requester_type,
+                    sos.portions_needed,
+                    1 if sos.veg_only else 0,
+                    sos.address,
+                    sos.lat,
+                    sos.lon,
+                    sos.needed_by.isoformat(),
+                    sos.urgency.value,
+                    sos.status.value,
+                    sos.contact_phone,
+                    sos.notes,
+                    sos.created_at.isoformat(),
+                ),
+            )
+        return sos
+    finally:
+        if conn is None:
+            c.close()
+
+
+def get_sos_request(sos_id: str, conn: Optional[sqlite3.Connection] = None) -> Optional[SOSRequest]:
+    c = conn or get_connection()
+    try:
+        cursor = c.execute("SELECT * FROM sos_requests WHERE id = ?", (sos_id,))
+        r = cursor.fetchone()
+        if not r:
+            return None
+        return SOSRequest(
+            id=r["id"],
+            requester_name=r["requester_name"],
+            requester_type=r["requester_type"],
+            portions_needed=r["portions_needed"],
+            veg_only=bool(r["veg_only"]),
+            address=r["address"],
+            lat=r["lat"],
+            lon=r["lon"],
+            needed_by=datetime.fromisoformat(r["needed_by"]),
+            urgency=SOSUrgency(r["urgency"]),
+            status=SOSStatus(r["status"]),
+            contact_phone=r["contact_phone"],
+            notes=r["notes"],
+            created_at=datetime.fromisoformat(r["created_at"]),
+        )
+    finally:
+        if conn is None:
+            c.close()
+
+
+def list_sos_requests(status: Optional[str] = None, conn: Optional[sqlite3.Connection] = None) -> List[SOSRequest]:
+    c = conn or get_connection()
+    try:
+        if status:
+            cursor = c.execute("SELECT * FROM sos_requests WHERE status = ? ORDER BY needed_by ASC", (status,))
+        else:
+            cursor = c.execute("SELECT * FROM sos_requests ORDER BY needed_by ASC")
+        return [
+            SOSRequest(
+                id=r["id"],
+                requester_name=r["requester_name"],
+                requester_type=r["requester_type"],
+                portions_needed=r["portions_needed"],
+                veg_only=bool(r["veg_only"]),
+                address=r["address"],
+                lat=r["lat"],
+                lon=r["lon"],
+                needed_by=datetime.fromisoformat(r["needed_by"]),
+                urgency=SOSUrgency(r["urgency"]),
+                status=SOSStatus(r["status"]),
+                contact_phone=r["contact_phone"],
+                notes=r["notes"],
+                created_at=datetime.fromisoformat(r["created_at"]),
+            )
+            for r in cursor.fetchall()
+        ]
+    finally:
+        if conn is None:
+            c.close()
+
+
+def update_sos_request(
+    sos: Union[SOSRequest, str],
+    status: Optional[Union[SOSStatus, str]] = None,
+    conn: Optional[sqlite3.Connection] = None,
+) -> Optional[SOSRequest]:
+    c = conn or get_connection()
+    try:
+        if isinstance(sos, str):
+            existing = get_sos_request(sos, conn=c)
+            if not existing:
+                return None
+            if status is not None:
+                existing.status = SOSStatus(status) if isinstance(status, str) else status
+            target = existing
+        else:
+            target = sos
+            if status is not None:
+                target.status = SOSStatus(status) if isinstance(status, str) else status
+
+        with c:
+            c.execute(
+                """
+                UPDATE sos_requests SET
+                    requester_name = ?, requester_type = ?, portions_needed = ?, veg_only = ?,
+                    address = ?, lat = ?, lon = ?, needed_by = ?, urgency = ?, status = ?,
+                    contact_phone = ?, notes = ?
+                WHERE id = ?
+                """,
+                (
+                    target.requester_name,
+                    target.requester_type,
+                    target.portions_needed,
+                    1 if target.veg_only else 0,
+                    target.address,
+                    target.lat,
+                    target.lon,
+                    target.needed_by.isoformat(),
+                    target.urgency.value,
+                    target.status.value,
+                    target.contact_phone,
+                    target.notes,
+                    target.id,
+                ),
+            )
+        return target
     finally:
         if conn is None:
             c.close()
